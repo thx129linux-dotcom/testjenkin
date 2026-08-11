@@ -1,0 +1,7 @@
+/vendor/
+/web/sites/*/files/
+/web/sites/*/private/
+/.env
+*.sql
+*.sql.gz
+.DS_Store
