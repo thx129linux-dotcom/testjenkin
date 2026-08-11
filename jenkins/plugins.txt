@@ -1,0 +1,15 @@
+git
+github
+workflow-aggregator
+credentials-binding
+ssh-agent
+ssh-credentials
+docker-workflow
+pipeline-stage-view
+junit
+htmlpublisher
+timestamper
+email-ext
+mailer
+blueocean
+

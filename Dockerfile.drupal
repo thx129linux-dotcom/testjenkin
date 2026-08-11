@@ -1,0 +1,60 @@
+FROM php:8.3-fpm-alpine
+
+# Installation des dépendances (Alpine Linux)
+RUN apk add --no-cache \
+    curl \
+    git \
+    unzip \
+    zip \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libxml2-dev \
+    postgresql-dev \
+    sqlite-dev \
+    oniguruma-dev \
+    openssl-dev \
+    curl-dev \
+    fcgi \
+    icu-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+    gd \
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
+    pdo_sqlite \
+    xml \
+    mbstring \
+    opcache \
+    intl \
+    bcmath \
+    curl
+
+# Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Drush
+RUN mkdir -p /tmp/drush-setup && \
+    composer require --dev drush/drush:^12 --working-dir=/tmp/drush-setup && \
+    mv /tmp/drush-setup/vendor/bin/drush /usr/local/bin/drush && \
+    chmod +x /usr/local/bin/drush
+
+# Configuration PHP
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY php.ini "$PHP_INI_DIR/conf.d/custom.ini"
+
+# Créer les répertoires de travail
+RUN mkdir -p /var/www/html && \
+    chown -R www-data:www-data /var/www/html
+
+WORKDIR /var/www/html
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:9000/ping || exit 1
+
+USER www-data
+
+EXPOSE 9000
+CMD ["php-fpm"]

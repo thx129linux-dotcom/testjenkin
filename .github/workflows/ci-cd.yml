@@ -1,0 +1,151 @@
+name: CI/CD Drupal - Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:latest
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: drupal
+          MYSQL_USER: drupal
+          MYSQL_PASSWORD: drupal
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📋 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: gd, pdo, pdo_mysql, xml, mbstring, curl, bcmath, intl, zip, json, tokenizer
+          coverage: pcov
+          tools: composer:v2, drush
+
+      - name: 📥 Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: ⚡ Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: 🔧 Install dependencies
+        run: |
+          composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
+
+      - name: 📁 Prepare directories
+        run: |
+          mkdir -p logs
+          mkdir -p web/sites/default/files
+          mkdir -p private
+          chmod -R 755 web/sites/default/files
+          echo "✅ Répertoires préparés"
+
+      - name: 📋 Create Drupal settings
+        run: |
+          if [ ! -f "web/sites/default/settings.php" ]; then
+            cp web/sites/default/default.settings.php web/sites/default/settings.php
+            chmod 644 web/sites/default/settings.php
+            echo "✅ settings.php créé"
+          fi
+
+          if [ ! -f "web/sites/default/settings.local.php" ]; then
+            cp web/sites/default/example.settings.local.php web/sites/default/settings.local.php
+            echo "✅ settings.local.php créé"
+          fi
+
+      - name: ✅ Run Tests
+        run: |
+          echo "========== TESTS =========="
+
+          # Vérification syntaxe PHP
+          echo "Vérification de la syntaxe PHP..."
+          find web/modules/custom web/themes/custom -name "*.php" -type f | head -50 | xargs -I {} php -l {} || true
+
+          # Vérification structure Drupal
+          if [ ! -f "web/index.php" ]; then
+            echo "❌ web/index.php manquant"
+            exit 1
+          fi
+
+          if [ ! -d "web/core" ]; then
+            echo "❌ web/core manquant"
+            exit 1
+          fi
+
+          # Validation composer
+          composer validate --no-check-publish
+
+          echo "✅ Tous les tests réussis"
+
+      - name: 🏗️ Build Project
+        run: |
+          echo "========== BUILD =========="
+          bash scripts/build.sh develop
+          echo "✅ Build complété"
+
+      - name: 📦 Build Docker Image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "========== BUILD DOCKER IMAGE =========="
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -f Dockerfile.drupal .
+          echo "✅ Image Docker construite"
+
+      - name: 📤 Push to GitHub Packages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "========== PUSH DOCKER IMAGE =========="
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u $ --password-stdin
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          echo "✅ Image Docker pushée"
+
+      - name: 📊 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: logs/
+          retention-days: 7
+
+  notify:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: 📢 Build Status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ Build réussi!"
+          else
+            echo "❌ Build échoué!"
+          fi

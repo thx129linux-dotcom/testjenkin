@@ -1,0 +1,36 @@
+version: "3.8"
+
+# Configuration de développement - Override du docker-compose.yml
+# À utiliser avec: docker compose -f docker-compose.yml -f docker-compose.override.yml up
+
+services:
+  drupal:
+    # Variables de développement
+    environment:
+      DRUPAL_ENV: develop
+      PHP_MEMORY_LIMIT: 1G
+      XDEBUG_MODE: debug
+      XDEBUG_CONFIG: "client_host=host.docker.internal"
+    volumes:
+      # Montage live pour le code
+      - .:/var/www/html
+    ports:
+      - "8888:9000" # Port XDebug
+
+  mariadb:
+    # Détails supplémentaires pour dev
+    ports:
+      - "${DB_HOST_PORT:-3307}:3306"
+    environment:
+      MYSQL_GENERAL_LOG: "1"
+      MYSQL_GENERAL_LOG_FILE: "/var/log/mysql/general.log"
+
+  redis:
+    # Redis accessible en dev
+    ports:
+      - "6379:6379"
+
+  jenkins:
+    # Jenkins avec plus de ressources en dev
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false -XX:+UseG1GC -XX:+UseStringDeduplication -Xmx1024m -Xms512m"

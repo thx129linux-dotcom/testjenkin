@@ -1,0 +1,91 @@
+name: Install Drupal
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_name:
+        description: 'Site name'
+        required: true
+        default: 'My Drupal Site'
+      admin_user:
+        description: 'Admin username'
+        required: true
+        default: 'admin'
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:latest
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: drupal
+          MYSQL_USER: drupal
+          MYSQL_PASSWORD: drupal
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: gd, pdo, pdo_mysql, xml, mbstring, curl, bcmath, intl, zip, json, tokenizer
+          tools: composer:v2, drush
+
+      - name: 🔧 Install dependencies
+        run: |
+          composer install --no-interaction --prefer-dist
+
+      - name: 📋 Create Drupal settings
+        run: |
+          cp web/sites/default/default.settings.php web/sites/default/settings.php
+          chmod 644 web/sites/default/settings.php
+          cp web/sites/default/example.settings.local.php web/sites/default/settings.local.php
+          chmod 644 web/sites/default/settings.local.php
+
+          mkdir -p web/sites/default/files
+          mkdir -p private
+          chmod 755 web/sites/default/files
+
+      - name: 🚀 Install Drupal
+        run: |
+          echo "========== INSTALLATION DRUPAL =========="
+
+          php vendor/bin/drush site:install standard -y \
+            --db-url="mysql://drupal:drupal@127.0.0.1:3306/drupal" \
+            --site-name="${{ github.event.inputs.site_name }}" \
+            --account-name="${{ github.event.inputs.admin_user }}" \
+            --account-pass="${{ secrets.DRUPAL_ADMIN_PASSWORD }}"
+
+          echo "✅ Drupal installé"
+
+      - name: 📊 Drupal Status
+        run: |
+          echo "========== DRUPAL STATUS =========="
+          php vendor/bin/drush status
+          php vendor/bin/drush user:list
+
+          echo "✅ Installation terminée"
+
+      - name: 📤 Commit changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          git add web/sites/default/settings.php web/sites/default/settings.local.php || true
+          git commit -m "chore: Drupal installation" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
+      - name: 📢 Installation Status
+        run: echo "✅ Installation Drupal complétée avec succès!"

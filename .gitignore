@@ -1,7 +1,85 @@
+# Drupal & Composer
 /vendor/
+composer.lock
+/web/core/
+/web/libraries/
+/web/modules/contrib/
+/web/profiles/contrib/
+/web/themes/contrib/
+
+# Drupal Configuration
 /web/sites/*/files/
 /web/sites/*/private/
-/.env
+/web/sites/*/settings.local.php
+/web/sites/*/services.local.yml
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+.env.local.php
+
+# Drupal specific
+/private/
+/tmp/
+/logs/
+
+# Database
 *.sql
 *.sql.gz
+*.db
+*.sqlite
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
+.project
+.buildpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Jenkins
+/jenkins_home/
+**/jenkins_home/
+
+# Docker
+.dockerignore
+docker-compose.local.yml
+
+# Backups
+/backups/
+*.tar.gz
+*.zip
+
+# Build artifacts
+/build/
+/dist/
+/cache/
+
+# Node modules (si utilisé)
+/node_modules/
+/package-lock.json
+/yarn.lock
+
+# Tests
+/coverage/
+/.phpunit.result.cache
+/phpstan.baseline.neon
+
+# Drush
+drush/Commands/contrib/
+.drush-lock-update
+
+# Project specific
+.vagrant/
+.vagrant_machines/
+Vagrantfile
+/temp/
+/tmp/
+.~

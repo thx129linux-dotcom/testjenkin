@@ -1,0 +1,95 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: 📤 Deploy to Server
+        run: |
+          DEPLOY_PATH=${{ secrets.DEPLOY_PATH }}
+          DEPLOY_USER=${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST=${{ secrets.DEPLOY_HOST }}
+          ENV=${{ github.event.inputs.environment || 'production' }}
+
+          echo "========== DÉPLOIEMENT =========="
+          echo "Vers: ${DEPLOY_HOST}"
+          echo "Path: ${DEPLOY_PATH}"
+          echo "Environnement: ${ENV}"
+
+          # Deployer via SSH
+          ssh -i ~/.ssh/deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd ${DEPLOY_PATH} && \
+            git fetch origin main && \
+            git checkout main && \
+            composer install --no-dev --optimize-autoloader && \
+            php vendor/bin/drush updatedb -y && \
+            php vendor/bin/drush config:import -y && \
+            php vendor/bin/drush cache:rebuild"
+
+          echo "✅ Déploiement complété"
+
+      - name: 🔄 Post-Deploy Health Check
+        run: |
+          HEALTH_URL=${{ secrets.HEALTH_CHECK_URL }}
+
+          if [ -z "$HEALTH_URL" ]; then
+            echo "⚠️ HEALTH_CHECK_URL non configuré"
+            exit 0
+          fi
+
+          echo "========== HEALTH CHECK =========="
+
+          for i in {1..5}; do
+            if curl -f "${HEALTH_URL}" > /dev/null 2>&1; then
+              echo "✅ Health check réussi"
+              exit 0
+            fi
+            echo "Tentative $i/5..."
+            sleep 10
+          done
+
+          echo "❌ Health check échoué après 5 tentatives"
+          exit 1
+
+      - name: 📢 Deployment Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Déploiement réussi vers ${{ github.event.inputs.environment || 'production' }}!"
+          else
+            echo "❌ Déploiement échoué!"
+            exit 1
+          fi
