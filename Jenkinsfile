@@ -266,7 +266,7 @@ pipeline {
                 echo "Date: ${new Date()}"
                 echo "Durée: ${currentBuild.durationString}"
             }
-            cleanWs()
+            deleteDir()
         }
 
         success {
