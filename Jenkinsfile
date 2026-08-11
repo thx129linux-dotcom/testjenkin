@@ -260,13 +260,11 @@ pipeline {
         always {
             script {
                 echo "========== RAPPORT FINAL =========="
-                sh '''
-                    echo "Build: ${BUILD_VERSION}"
-                    echo "Status: ${BUILD_STATUS}"
-                    echo "Environnement: ${ENVIRONMENT}"
-                    echo "Date: $(date)"
-                    echo "Durée: $((${SECONDS} / 60)) minutes"
-                '''
+                echo "Build: ${env.BUILD_VERSION ?: 'N/A'}"
+                echo "Status: ${currentBuild.currentResult}"
+                echo "Environnement: ${params.ENVIRONMENT ?: 'N/A'}"
+                echo "Date: ${new Date()}"
+                echo "Durée: ${currentBuild.durationString}"
             }
             cleanWs()
         }
