@@ -75,7 +75,7 @@ pipeline {
             description: 'Utilisateur base de données'
         )
 
-        password(
+        string(
             name: 'DB_PASSWORD',
             defaultValue: 'drupal_password',
             description: 'Mot de passe base de données'
@@ -83,6 +83,10 @@ pipeline {
     }
 
     environment {
+        DB_HOST_DEFAULT = 'mariadb'
+        DB_NAME_DEFAULT = 'drupal'
+        DB_USER_DEFAULT = 'drupal'
+        DB_PASSWORD_DEFAULT = 'drupal_password'
         DEPLOY_ALLOWED = 'false'
         DEPLOY_EXECUTED = 'false'
         DEPLOY_SKIP_REASONS = ''
@@ -229,15 +233,19 @@ pipeline {
 
             steps {
                 withEnv([
-                    "DB_HOST=${params.DB_HOST}",
-                    "DB_NAME=${params.DB_NAME}",
-                    "DB_USER=${params.DB_USER}",
-                    "DB_PASSWORD=${params.DB_PASSWORD ?: 'drupal_password'}"
+                    "DB_HOST=${params.DB_HOST ?: env.DB_HOST_DEFAULT}",
+                    "DB_NAME=${params.DB_NAME ?: env.DB_NAME_DEFAULT}",
+                    "DB_USER=${params.DB_USER ?: env.DB_USER_DEFAULT}",
+                    "DB_PASSWORD=${params.DB_PASSWORD ?: env.DB_PASSWORD_DEFAULT}"
                 ]) {
                     sh '''
                         set -e
 
                         echo "========== INSTALLATION DE DRUPAL =========="
+                        echo "DB_HOST=${DB_HOST:-<vide>}"
+                        echo "DB_NAME=${DB_NAME:-<vide>}"
+                        echo "DB_USER=${DB_USER:-<vide>}"
+                        echo "DB_PASSWORD=${DB_PASSWORD:+<défini>}"
 
                         if [ ! -f "web/sites/default/settings.php" ]; then
                             echo "Création de settings.php..."
@@ -261,6 +269,7 @@ pipeline {
 
                         if [ -z "${DB_HOST:-}" ] || [ -z "${DB_NAME:-}" ] || [ -z "${DB_USER:-}" ] || [ -z "${DB_PASSWORD:-}" ]; then
                             echo "❌ ERREUR: variables DB manquantes (DB_HOST, DB_NAME, DB_USER, DB_PASSWORD)."
+                            echo "Valeurs actives: DB_HOST=${DB_HOST:-<vide>} DB_NAME=${DB_NAME:-<vide>} DB_USER=${DB_USER:-<vide>} DB_PASSWORD=${DB_PASSWORD:+<défini>}"
                             exit 1
                         fi
 
