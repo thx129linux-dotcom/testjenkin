@@ -228,48 +228,55 @@ pipeline {
             }
 
             steps {
-                sh '''
-                    set -e
+                withEnv([
+                    "DB_HOST=${params.DB_HOST}",
+                    "DB_NAME=${params.DB_NAME}",
+                    "DB_USER=${params.DB_USER}",
+                    "DB_PASSWORD=${params.DB_PASSWORD}"
+                ]) {
+                    sh '''
+                        set -e
 
-                    echo "========== INSTALLATION DE DRUPAL =========="
+                        echo "========== INSTALLATION DE DRUPAL =========="
 
-                    if [ ! -f "web/sites/default/settings.php" ]; then
-                        echo "Création de settings.php..."
-                        cp web/sites/default/default.settings.php \
-                           web/sites/default/settings.php
+                        if [ ! -f "web/sites/default/settings.php" ]; then
+                            echo "Création de settings.php..."
+                            cp web/sites/default/default.settings.php \
+                               web/sites/default/settings.php
 
-                        chmod 644 web/sites/default/settings.php
-                    fi
+                            chmod 644 web/sites/default/settings.php
+                        fi
 
-                    if [ ! -f "web/sites/default/settings.local.php" ]; then
-                        echo "Création de settings.local.php..."
-                        cp web/sites/default/example.settings.local.php \
-                           web/sites/default/settings.local.php
-                    fi
+                        if [ ! -f "web/sites/default/settings.local.php" ]; then
+                            echo "Création de settings.local.php..."
+                            cp web/sites/default/example.settings.local.php \
+                               web/sites/default/settings.local.php
+                        fi
 
-                    if [ ! -x "vendor/bin/drush" ]; then
-                        echo "❌ ERREUR: drush introuvable (vendor/bin/drush)."
-                        echo "Ajoutez drush au projet: composer require drush/drush"
-                        exit 1
-                    fi
+                        if [ ! -x "vendor/bin/drush" ]; then
+                            echo "❌ ERREUR: drush introuvable (vendor/bin/drush)."
+                            echo "Ajoutez drush au projet: composer require drush/drush"
+                            exit 1
+                        fi
 
-                    if [ -z "${DB_HOST:-}" ] || [ -z "${DB_NAME:-}" ] || [ -z "${DB_USER:-}" ] || [ -z "${DB_PASSWORD:-}" ]; then
-                        echo "❌ ERREUR: variables DB manquantes (DB_HOST, DB_NAME, DB_USER, DB_PASSWORD)."
-                        exit 1
-                    fi
+                        if [ -z "${DB_HOST:-}" ] || [ -z "${DB_NAME:-}" ] || [ -z "${DB_USER:-}" ] || [ -z "${DB_PASSWORD:-}" ]; then
+                            echo "❌ ERREUR: variables DB manquantes (DB_HOST, DB_NAME, DB_USER, DB_PASSWORD)."
+                            exit 1
+                        fi
 
-                    if php vendor/bin/drush status --field=bootstrap 2>/dev/null | grep -qi successful; then
-                        echo "ℹ️ Drupal déjà installé"
-                    else
-                        php vendor/bin/drush site:install standard -y \
-                            --db-url="mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}/${DB_NAME}" \
-                            --site-name="Drupal CI/CD" \
-                            --account-name=admin \
-                            --account-pass=admin123
-                    fi
+                        if php vendor/bin/drush status --field=bootstrap 2>/dev/null | grep -qi successful; then
+                            echo "ℹ️ Drupal déjà installé"
+                        else
+                            php vendor/bin/drush site:install standard -y \
+                                --db-url="mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}/${DB_NAME}" \
+                                --site-name="Drupal CI/CD" \
+                                --account-name=admin \
+                                --account-pass=admin123
+                        fi
 
-                    echo "✅ Drupal installé/configuré"
-                '''
+                        echo "✅ Drupal installé/configuré"
+                    '''
+                }
             }
         }
 
@@ -357,35 +364,43 @@ pipeline {
                         usernameVariable: 'SSH_CREDENTIAL_USER'
                     )
                 ]) {
-                    sh '''
-                        set -e
+                    withEnv([
+                        "BRANCH_NAME=${env.BRANCH_NAME}",
+                        "DEPLOY_ENV_EFFECTIVE=${env.DEPLOY_ENV_EFFECTIVE}",
+                        "SERVER_IP=${params.SERVER_IP}",
+                        "DEPLOY_PATH=${params.DEPLOY_PATH}",
+                        "DEPLOY_USER=${params.DEPLOY_USER}"
+                    ]) {
+                        sh '''
+                            set -e
 
-                        echo "========== DÉPLOIEMENT =========="
-                        echo "Branche       : ${BRANCH_NAME}"
-                        echo "Environnement : ${DEPLOY_ENV_EFFECTIVE}"
-                        echo "Serveur       : ${SERVER_IP}"
-                        echo "Répertoire    : ${DEPLOY_PATH}"
+                            echo "========== DÉPLOIEMENT =========="
+                            echo "Branche       : ${BRANCH_NAME}"
+                            echo "Environnement : ${DEPLOY_ENV_EFFECTIVE}"
+                            echo "Serveur       : ${SERVER_IP}"
+                            echo "Répertoire    : ${DEPLOY_PATH}"
 
-                        DEPLOY_USER_EFFECTIVE="${DEPLOY_USER}"
+                            DEPLOY_USER_EFFECTIVE="${DEPLOY_USER}"
 
-                        if [ -z "$DEPLOY_USER_EFFECTIVE" ]; then
-                            DEPLOY_USER_EFFECTIVE="${SSH_CREDENTIAL_USER}"
-                        fi
+                            if [ -z "$DEPLOY_USER_EFFECTIVE" ]; then
+                                DEPLOY_USER_EFFECTIVE="${SSH_CREDENTIAL_USER}"
+                            fi
 
-                        if [ -z "$SERVER_IP" ]; then
-                            echo "❌ SERVER_IP n'est pas renseignée."
-                            exit 1
-                        fi
+                            if [ -z "$SERVER_IP" ]; then
+                                echo "❌ SERVER_IP n'est pas renseignée."
+                                exit 1
+                            fi
 
-                        bash scripts/deploy.sh \
-                            "${DEPLOY_ENV_EFFECTIVE}" \
-                            "${SERVER_IP}" \
-                            "${DEPLOY_USER_EFFECTIVE}" \
-                            "${DEPLOY_PATH}" \
-                            "${SSH_KEY_FILE}"
+                            bash scripts/deploy.sh \
+                                "${DEPLOY_ENV_EFFECTIVE}" \
+                                "${SERVER_IP}" \
+                                "${DEPLOY_USER_EFFECTIVE}" \
+                                "${DEPLOY_PATH}" \
+                                "${SSH_KEY_FILE}"
 
-                        echo "✅ Déploiement complété"
-                    '''
+                            echo "✅ Déploiement complété"
+                        '''
+                    }
                 }
             }
         }
