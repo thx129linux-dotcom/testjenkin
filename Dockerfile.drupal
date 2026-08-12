@@ -36,7 +36,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 # Drush
 RUN mkdir -p /tmp/drush-setup && \
-    composer require --dev drush/drush:^12 --working-dir=/tmp/drush-setup && \
+    composer require drush/drush:^13 --working-dir=/tmp/drush-setup && \
     mv /tmp/drush-setup/vendor/bin/drush /usr/local/bin/drush && \
     chmod +x /usr/local/bin/drush
 

@@ -26,6 +26,16 @@ if [ -n "$DEPLOY_HOST" ]; then
         SSH_OPTS="$SSH_OPTS -i $SSH_KEY_FILE"
     fi
 
+    if [ ! -d "vendor" ]; then
+        echo "❌ Répertoire vendor introuvable. Exécutez d'abord composer install."
+        exit 1
+    fi
+
+    if [ ! -x "vendor/bin/drush" ]; then
+        echo "❌ Drush introuvable dans vendor/bin/drush. Vérifiez l'installation Composer."
+        exit 1
+    fi
+
     echo "✓ Préparation du serveur distant..."
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR' '$BACKUP_DIR'"
 
@@ -58,6 +68,11 @@ if [ -n "$DEPLOY_HOST" ]; then
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && if [ -x 'vendor/bin/drush' ]; then php vendor/bin/drush -y updatedb || true; php vendor/bin/drush -y config:import || true; php vendor/bin/drush cache:rebuild || true; else echo '⚠️ drush non trouvé sur serveur'; fi"
 else
     # Déploiement local (fallback)
+    if [ ! -d "vendor" ]; then
+        echo "❌ Répertoire vendor introuvable. Exécutez d'abord composer install."
+        exit 1
+    fi
+
     mkdir -p "$DEPLOY_DIR"
     mkdir -p "$BACKUP_DIR"
 
