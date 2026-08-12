@@ -77,7 +77,7 @@ pipeline {
 
         password(
             name: 'DB_PASSWORD',
-            defaultValue: '',
+            defaultValue: 'drupal_password',
             description: 'Mot de passe base de données'
         )
     }
@@ -232,7 +232,7 @@ pipeline {
                     "DB_HOST=${params.DB_HOST}",
                     "DB_NAME=${params.DB_NAME}",
                     "DB_USER=${params.DB_USER}",
-                    "DB_PASSWORD=${params.DB_PASSWORD}"
+                    "DB_PASSWORD=${params.DB_PASSWORD ?: 'drupal_password'}"
                 ]) {
                     sh '''
                         set -e
