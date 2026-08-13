@@ -17,7 +17,7 @@ services:
     ports:
       - "8888:9000" # Port XDebug
 
-  mariadb:
+  mysql:
     # Détails supplémentaires pour dev
     ports:
       - "${DB_HOST_PORT:-3307}:3306"

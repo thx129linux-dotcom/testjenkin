@@ -905,7 +905,7 @@ $settings['migrate_node_migrate_type_classic'] = FALSE;
 # }
 $drupal_env = strtolower(getenv('DRUPAL_ENV') ?: 'production');
 $is_development_env = in_array($drupal_env, ['dev', 'develop', 'development', 'local'], true);
-$db_default_host = $is_development_env ? 'mariadb' : 'localhost';
+$db_default_host = $is_development_env ? 'mysql' : 'localhost';
 
 $databases['default']['default'] = [
   'database' => getenv('DB_NAME') ?: 'drupal',

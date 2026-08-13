@@ -1,10 +1,10 @@
 version: "3.8"
 
 services:
-  # Base de données MariaDB/MySQL
-  mariadb:
-    image: mariadb:latest
-    container_name: drupal-mariadb
+  # Base de données MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: drupal-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
@@ -12,7 +12,7 @@ services:
       MYSQL_USER: ${DB_USER:-drupal}
       MYSQL_PASSWORD: ${DB_PASSWORD:-drupal_password}
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "${DB_HOST_PORT:-3307}:3306"
@@ -20,7 +20,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "mariadb-admin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent",
+          "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent",
         ]
       timeout: 3s
       retries: 5
@@ -34,10 +34,10 @@ services:
     container_name: drupal-app
     restart: unless-stopped
     depends_on:
-      mariadb:
+      mysql:
         condition: service_healthy
     environment:
-      DB_HOST: ${DB_HOST:-mariadb}
+      DB_HOST: ${DB_HOST:-mysql}
       DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-drupal}
       DB_USER: ${DB_USER:-drupal}
@@ -129,7 +129,7 @@ services:
       interval: 10s
 
 volumes:
-  mariadb_data:
+  mysql_data:
     driver: local
   drupal_files:
     driver: local

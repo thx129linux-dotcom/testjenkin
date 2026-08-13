@@ -77,7 +77,7 @@ pipeline {
 
         string(
             name: 'DB_HOST',
-            defaultValue: 'mariadb',
+            defaultValue: 'mysql',
             description: 'Hôte base de données MySQL/MariaDB'
         )
 
@@ -101,7 +101,7 @@ pipeline {
     }
 
     environment {
-        DB_HOST_DEFAULT = 'mariadb'
+        DB_HOST_DEFAULT = 'mysql'
         DB_NAME_DEFAULT = 'drupal'
         DB_USER_DEFAULT = 'drupal'
         DB_PASSWORD_DEFAULT = 'drupal_password'
