@@ -407,6 +407,10 @@ pipeline {
                         params.DEPLOY_PATH.trim() :
                         (deployEnv == 'staging' ? '/var/www/drupal-staging' : '/var/www/drupal-production')
                     def sshCredentialsId = (params.SSH_CREDENTIALS_ID?.trim()) ? params.SSH_CREDENTIALS_ID.trim() : 'deploy-key'
+                    def dbHost = (params.DB_HOST?.trim()) ? params.DB_HOST.trim() : (env.DB_HOST_DEFAULT ?: 'localhost')
+                    def dbName = (params.DB_NAME?.trim()) ? params.DB_NAME.trim() : (env.DB_NAME_DEFAULT ?: '')
+                    def dbUser = (params.DB_USER?.trim()) ? params.DB_USER.trim() : (env.DB_USER_DEFAULT ?: '')
+                    def dbPassword = (params.DB_PASSWORD?.trim()) ? params.DB_PASSWORD.trim() : (env.DB_PASSWORD_DEFAULT ?: '')
 
                     withCredentials([
                         sshUserPrivateKey(
@@ -420,7 +424,12 @@ pipeline {
                             "DEPLOY_ENV_EFFECTIVE=${deployEnv}",
                             "SERVER_IP=${serverIp}",
                             "DEPLOY_PATH=${deployPath}",
-                            "DEPLOY_USER=${params.DEPLOY_USER}"
+                            "DEPLOY_USER=${params.DEPLOY_USER}",
+                            "REMOTE_DRUPAL_INSTALL=${params.INSTALL_DRUPAL}",
+                            "DB_HOST=${dbHost}",
+                            "DB_NAME=${dbName}",
+                            "DB_USER=${dbUser}",
+                            "DB_PASSWORD=${dbPassword}"
                         ]) {
                             sh '''
                             set -e

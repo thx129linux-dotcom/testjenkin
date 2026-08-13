@@ -8,12 +8,14 @@ DEPLOY_DIR="${4:-/var/www/drupal-${ENVIRONMENT}}"
 SSH_KEY_FILE="${5:-}"
 BACKUP_DIR="/var/www/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+REMOTE_DRUPAL_INSTALL="${REMOTE_DRUPAL_INSTALL:-false}"
 
 echo "========== DRUPAL DEPLOY SCRIPT =========="
 echo "Environnement: $ENVIRONMENT"
 echo "Hôte cible: ${DEPLOY_HOST:-local}"
 echo "Répertoire cible: $DEPLOY_DIR"
 echo "Timestamp: $TIMESTAMP"
+echo "Installation Drupal distante auto: $REMOTE_DRUPAL_INSTALL"
 
 # Charger les variables d'environnement
 if [ -f ".env" ]; then
@@ -118,6 +120,30 @@ if [ -n "$DEPLOY_HOST" ]; then
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "if [ ! -f '$DEPLOY_DIR/web/sites/default/settings.local.php' ] && [ -f '$DEPLOY_DIR/web/sites/default/example.settings.local.php' ]; then cp '$DEPLOY_DIR/web/sites/default/example.settings.local.php' '$DEPLOY_DIR/web/sites/default/settings.local.php'; fi"
 
     echo "✓ Opérations post-déploiement Drupal sur serveur..."
+    REMOTE_DB_HOST="${DB_HOST:-localhost}"
+    REMOTE_DB_NAME="${DB_NAME:-}"
+    REMOTE_DB_USER="${DB_USER:-}"
+    REMOTE_DB_PASSWORD="${DB_PASSWORD:-}"
+
+    if ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush status --field=bootstrap 2>/dev/null | grep -qi successful"; then
+        echo "✓ Drupal déjà installé sur le serveur distant."
+    else
+        if [ "$REMOTE_DRUPAL_INSTALL" = "true" ]; then
+            if [ -z "$REMOTE_DB_NAME" ] || [ -z "$REMOTE_DB_USER" ] || [ -z "$REMOTE_DB_PASSWORD" ]; then
+                echo "❌ Variables DB manquantes pour l'installation distante (DB_NAME, DB_USER, DB_PASSWORD)."
+                echo "   Renseignez les paramètres Jenkins DB_* puis relancez avec INSTALL_DRUPAL=true."
+                exit 1
+            fi
+
+            echo "⚠️ Drupal non installé sur le serveur distant, lancement de site:install..."
+            ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y site:install standard --db-url='mysql://${REMOTE_DB_USER}:${REMOTE_DB_PASSWORD}@${REMOTE_DB_HOST}/${REMOTE_DB_NAME}' --site-name='Drupal ${ENVIRONMENT}' --account-name=admin --account-pass=admin123"
+        else
+            echo "❌ Drupal non installé sur le serveur distant."
+            echo "   Relancez le job avec INSTALL_DRUPAL=true pour initialiser la base distante."
+            exit 1
+        fi
+    fi
+
     # Plus de "|| true" ici : si updatedb/config:import échoue, le déploiement
     # doit être marqué en échec dans Jenkins plutôt que de faire croire à un succès.
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y updatedb && '$REMOTE_PHP_BIN' vendor/bin/drush -y config:import && '$REMOTE_PHP_BIN' vendor/bin/drush cache:rebuild"
