@@ -64,6 +64,12 @@ pipeline {
         )
 
         string(
+            name: 'SSH_CREDENTIALS_ID',
+            defaultValue: 'deploy-key',
+            description: 'ID Jenkins du credential SSH (type: SSH Username with private key)'
+        )
+
+        string(
             name: 'DEPLOY_PATH',
             defaultValue: '',
             description: 'Répertoire de déploiement - si vide, déduit automatiquement de ENVIRONMENT (/var/www/drupal-staging ou /var/www/drupal-production)'
@@ -340,9 +346,19 @@ pipeline {
         stage('Deploy Gate') {
             steps {
                 script {
+                    def deployEnv = (params.ENVIRONMENT ?: 'production').toString()
+                    def serverIp = (params.SERVER_IP?.trim()) ?
+                        params.SERVER_IP.trim() :
+                        (deployEnv == 'staging' ? (params.SERVER_IP_STAGING?.trim() ?: '') : (params.SERVER_IP_PRODUCTION?.trim() ?: ''))
+                    def deployPath = (params.DEPLOY_PATH?.trim()) ?
+                        params.DEPLOY_PATH.trim() :
+                        (deployEnv == 'staging' ? '/var/www/drupal-staging' : '/var/www/drupal-production')
+
                     env.DEPLOY_ALLOWED = 'false'
                     env.DEPLOY_SKIP_REASONS = ''
-                    env.DEPLOY_ENV_EFFECTIVE = "${params.ENVIRONMENT ?: 'production'}"
+                    env.DEPLOY_ENV_EFFECTIVE = deployEnv
+                    env.SERVER_IP_EFFECTIVE = serverIp
+                    env.DEPLOY_PATH_EFFECTIVE = deployPath
 
                     // Un seul dépôt/branche (main) : la cible de déploiement est pilotée
                     // uniquement par le paramètre ENVIRONMENT. "develop" reste local
@@ -351,32 +367,13 @@ pipeline {
                     if (env.BRANCH_NAME != 'main') {
                         env.DEPLOY_SKIP_REASONS = "Branche attendue: main (actuelle: ${env.BRANCH_NAME})"
                         echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
-                    } else if (params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production') {
+                    } else if (deployEnv == 'staging' || deployEnv == 'production') {
                         env.DEPLOY_ALLOWED = 'true'
-                        env.DEPLOY_ENV_EFFECTIVE = "${params.ENVIRONMENT}"
 
-                        // IP effective : SERVER_IP (override manuel) > SERVER_IP_STAGING/PRODUCTION (défaut par env)
-                        if (params.SERVER_IP?.trim()) {
-                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP.trim()}"
-                        } else if (params.ENVIRONMENT == 'staging') {
-                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP_STAGING?.trim() ?: ''}"
-                        } else {
-                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP_PRODUCTION?.trim() ?: ''}"
-                        }
-
-                        // Chemin effectif : DEPLOY_PATH (override manuel) sinon déduit de l'environnement
-                        if (params.DEPLOY_PATH?.trim()) {
-                            env.DEPLOY_PATH_EFFECTIVE = "${params.DEPLOY_PATH.trim()}"
-                        } else if (params.ENVIRONMENT == 'staging') {
-                            env.DEPLOY_PATH_EFFECTIVE = '/var/www/drupal-staging'
-                        } else {
-                            env.DEPLOY_PATH_EFFECTIVE = '/var/www/drupal-production'
-                        }
-
-                        echo "✅ Conditions de déploiement validées (branche main + ${params.ENVIRONMENT})."
-                        echo "✅ Environnement de déploiement effectif : ${env.DEPLOY_ENV_EFFECTIVE}"
-                        echo "✅ Serveur effectif : ${env.SERVER_IP_EFFECTIVE ?: '<non renseigné>'}"
-                        echo "✅ Chemin effectif  : ${env.DEPLOY_PATH_EFFECTIVE}"
+                        echo "✅ Conditions de déploiement validées (branche main + ${deployEnv})."
+                        echo "✅ Environnement de déploiement effectif : ${deployEnv}"
+                        echo "✅ Serveur effectif : ${serverIp ?: '<non renseigné>'}"
+                        echo "✅ Chemin effectif  : ${deployPath}"
                     } else {
                         env.DEPLOY_SKIP_REASONS = "Environnement 'develop' : pas de déploiement serveur."
                         echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
@@ -400,21 +397,31 @@ pipeline {
                     env.DEPLOY_EXECUTED = 'true'
                 }
 
-                withCredentials([
-                    sshUserPrivateKey(
-                        credentialsId: 'deploy-key',
-                        keyFileVariable: 'SSH_KEY_FILE',
-                        usernameVariable: 'SSH_CREDENTIAL_USER'
-                    )
-                ]) {
-                    withEnv([
-                        "BRANCH_NAME=${env.BRANCH_NAME}",
-                        "DEPLOY_ENV_EFFECTIVE=${env.DEPLOY_ENV_EFFECTIVE}",
-                        "SERVER_IP=${env.SERVER_IP_EFFECTIVE}",
-                        "DEPLOY_PATH=${env.DEPLOY_PATH_EFFECTIVE}",
-                        "DEPLOY_USER=${params.DEPLOY_USER}"
+                script {
+                    def deployEnv = (params.ENVIRONMENT ?: 'production').toString()
+                    def serverIp = (params.SERVER_IP?.trim()) ?
+                        params.SERVER_IP.trim() :
+                        (deployEnv == 'staging' ? (params.SERVER_IP_STAGING?.trim() ?: '') : (params.SERVER_IP_PRODUCTION?.trim() ?: ''))
+                    def deployPath = (params.DEPLOY_PATH?.trim()) ?
+                        params.DEPLOY_PATH.trim() :
+                        (deployEnv == 'staging' ? '/var/www/drupal-staging' : '/var/www/drupal-production')
+                    def sshCredentialsId = (params.SSH_CREDENTIALS_ID?.trim()) ? params.SSH_CREDENTIALS_ID.trim() : 'deploy-key'
+
+                    withCredentials([
+                        sshUserPrivateKey(
+                            credentialsId: sshCredentialsId,
+                            keyFileVariable: 'SSH_KEY_FILE',
+                            usernameVariable: 'SSH_CREDENTIAL_USER'
+                        )
                     ]) {
-                        sh '''
+                        withEnv([
+                            "BRANCH_NAME=${env.BRANCH_NAME}",
+                            "DEPLOY_ENV_EFFECTIVE=${deployEnv}",
+                            "SERVER_IP=${serverIp}",
+                            "DEPLOY_PATH=${deployPath}",
+                            "DEPLOY_USER=${params.DEPLOY_USER}"
+                        ]) {
+                            sh '''
                             set -e
 
                             echo "========== DÉPLOIEMENT =========="
@@ -444,7 +451,8 @@ pipeline {
                                 "${SSH_KEY_FILE}"
 
                             echo "✅ Déploiement complété"
-                        '''
+                            '''
+                        }
                     }
                 }
             }
