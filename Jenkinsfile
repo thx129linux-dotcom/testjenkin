@@ -375,8 +375,9 @@ pipeline {
                         echo "✅ Serveur effectif : ${serverIp ?: '<non renseigné>'}"
                         echo "✅ Chemin effectif  : ${deployPath}"
                     } else {
-                        env.DEPLOY_SKIP_REASONS = "Environnement 'develop' : pas de déploiement serveur."
-                        echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
+                        def skipReason = "Environnement 'develop' : pas de déploiement serveur."
+                        env.DEPLOY_SKIP_REASONS = skipReason.toString()
+                        echo "ℹ️ Déploiement ignoré: ${skipReason}"
                     }
                 }
             }
