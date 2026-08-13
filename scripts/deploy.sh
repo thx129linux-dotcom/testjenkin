@@ -56,7 +56,17 @@ if [ -n "$DEPLOY_HOST" ]; then
     fi
 
     echo "✓ Préparation du serveur distant..."
-    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR' '$BACKUP_DIR'"
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR'"
+
+    if ! ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$BACKUP_DIR'"; then
+        if [ -n "$REMOTE_SUDO_CMD" ]; then
+            if ! ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "$REMOTE_SUDO_CMD mkdir -p '$BACKUP_DIR'"; then
+                echo "⚠️ Création du répertoire de backup échouée ($BACKUP_DIR). Les backups distants seront ignorés."
+            fi
+        else
+            echo "⚠️ Création du répertoire de backup échouée ($BACKUP_DIR). Les backups distants seront ignorés."
+        fi
+    fi
 
     echo "✓ Backup distant (si existant)..."
     # Le backup ne doit jamais bloquer un déploiement : on le tente, on avertit en cas d'échec.
