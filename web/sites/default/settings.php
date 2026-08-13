@@ -905,8 +905,8 @@ $settings['migrate_node_migrate_type_classic'] = FALSE;
 # }
 $databases['default']['default'] = array (
   'database' => 'drupal',
-  'username' => 'drupal',
-  'password' => 'drupal_password_change_me',
+  'username' => 'root',
+  'password' => '7p%~Cb%C5BtZyVX4+',
   'prefix' => '',
   'host' => 'mariadb',
   'port' => 3306,
