@@ -342,7 +342,7 @@ pipeline {
                 script {
                     env.DEPLOY_ALLOWED = 'false'
                     env.DEPLOY_SKIP_REASONS = ''
-                    env.DEPLOY_ENV_EFFECTIVE = params.ENVIRONMENT ?: 'production'
+                    env.DEPLOY_ENV_EFFECTIVE = "${params.ENVIRONMENT ?: 'production'}"
 
                     // Un seul dépôt/branche (main) : la cible de déploiement est pilotée
                     // uniquement par le paramètre ENVIRONMENT. "develop" reste local
@@ -353,20 +353,20 @@ pipeline {
                         echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
                     } else if (params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production') {
                         env.DEPLOY_ALLOWED = 'true'
-                        env.DEPLOY_ENV_EFFECTIVE = params.ENVIRONMENT
+                        env.DEPLOY_ENV_EFFECTIVE = "${params.ENVIRONMENT}"
 
                         // IP effective : SERVER_IP (override manuel) > SERVER_IP_STAGING/PRODUCTION (défaut par env)
                         if (params.SERVER_IP?.trim()) {
-                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP.trim()
+                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP.trim()}"
                         } else if (params.ENVIRONMENT == 'staging') {
-                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP_STAGING?.trim() ?: ''
+                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP_STAGING?.trim() ?: ''}"
                         } else {
-                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP_PRODUCTION?.trim() ?: ''
+                            env.SERVER_IP_EFFECTIVE = "${params.SERVER_IP_PRODUCTION?.trim() ?: ''}"
                         }
 
                         // Chemin effectif : DEPLOY_PATH (override manuel) sinon déduit de l'environnement
                         if (params.DEPLOY_PATH?.trim()) {
-                            env.DEPLOY_PATH_EFFECTIVE = params.DEPLOY_PATH.trim()
+                            env.DEPLOY_PATH_EFFECTIVE = "${params.DEPLOY_PATH.trim()}"
                         } else if (params.ENVIRONMENT == 'staging') {
                             env.DEPLOY_PATH_EFFECTIVE = '/var/www/drupal-staging'
                         } else {
@@ -388,7 +388,10 @@ pipeline {
         stage('Deploy') {
             when {
                 expression {
-                    return env.DEPLOY_ALLOWED == 'true'
+                    return (
+                        env.BRANCH_NAME == 'main' &&
+                        (params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production')
+                    )
                 }
             }
 
@@ -450,7 +453,10 @@ pipeline {
         stage('Post-Deploy') {
             when {
                 expression {
-                    return env.DEPLOY_ALLOWED == 'true'
+                    return (
+                        env.BRANCH_NAME == 'main' &&
+                        (params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production')
+                    )
                 }
             }
 
