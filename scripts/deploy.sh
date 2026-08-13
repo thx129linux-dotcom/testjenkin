@@ -75,7 +75,7 @@ if [ -n "$DEPLOY_HOST" ]; then
     fi
 
     echo "✓ Synchronisation des sources..."
-    rsync -avz --delete -e "ssh $SSH_OPTS" \
+    rsync -rlvz --delete --no-perms --no-owner --no-group --omit-dir-times --no-times -e "ssh $SSH_OPTS" \
         --exclude=".git" \
         --exclude="node_modules" \
         --exclude="vendor" \
@@ -85,7 +85,7 @@ if [ -n "$DEPLOY_HOST" ]; then
         . "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
 
     echo "✓ Synchronisation des dépendances vendor..."
-    rsync -avz --delete -e "ssh $SSH_OPTS" vendor/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/vendor/"
+    rsync -rlvz --delete --no-perms --no-owner --no-group --omit-dir-times --no-times -e "ssh $SSH_OPTS" vendor/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/vendor/"
 
     echo "✓ Permissions et bootstrap fichiers sur serveur..."
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs'"
