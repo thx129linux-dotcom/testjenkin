@@ -45,6 +45,22 @@ if [ -n "$DEPLOY_HOST" ]; then
         echo "   Le script continue sans sudo ; certaines opérations (chown) seront ignorées."
     fi
 
+    REMOTE_PHP_BIN=""
+    for candidate in php /usr/bin/php php8.3 /usr/bin/php8.3 php8.2 /usr/bin/php8.2 php8.1 /usr/bin/php8.1; do
+        if ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "command -v '$candidate' >/dev/null 2>&1" >/dev/null 2>&1; then
+            REMOTE_PHP_BIN="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$REMOTE_PHP_BIN" ]; then
+        echo "❌ Aucun binaire PHP exécutable trouvé sur le serveur distant."
+        echo "   Installez PHP CLI ou ajoutez-le au PATH de l'utilisateur $DEPLOY_USER."
+        exit 1
+    fi
+
+    echo "✓ PHP distant détecté: $REMOTE_PHP_BIN"
+
     if [ ! -d "vendor" ]; then
         echo "❌ Répertoire vendor introuvable. Exécutez d'abord composer install."
         exit 1
@@ -104,7 +120,7 @@ if [ -n "$DEPLOY_HOST" ]; then
     echo "✓ Opérations post-déploiement Drupal sur serveur..."
     # Plus de "|| true" ici : si updatedb/config:import échoue, le déploiement
     # doit être marqué en échec dans Jenkins plutôt que de faire croire à un succès.
-    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && php vendor/bin/drush -y updatedb && php vendor/bin/drush -y config:import && php vendor/bin/drush cache:rebuild"
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y updatedb && '$REMOTE_PHP_BIN' vendor/bin/drush -y config:import && '$REMOTE_PHP_BIN' vendor/bin/drush cache:rebuild"
 else
     # Déploiement local (fallback)
     if [ ! -d "vendor" ]; then
