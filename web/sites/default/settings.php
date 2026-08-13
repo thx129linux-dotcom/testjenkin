@@ -905,7 +905,7 @@ $settings['migrate_node_migrate_type_classic'] = FALSE;
 # }
 $databases['default']['default'] = array (
   'database' => 'drupal',
-  'username' => 'root',
+  'username' => 'drupal',
   'password' => '7p%~Cb%C5BtZyVX4+',
   'prefix' => '',
   'host' => 'mariadb',
@@ -916,3 +916,5 @@ $databases['default']['default'] = array (
   'autoload' => 'core/modules/mysql/src/Driver/Database/mysql/',
 );
 $settings['config_sync_directory'] = 'sites/default/files/config_j4opytXd1YY19P1UnYPC24Jao3sCGJaqYbU7i0DTsET1-ozJVWhyijbcv8wqgxCo6PZ5xGSqvQ/sync';
+
+
