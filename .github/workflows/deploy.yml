@@ -102,14 +102,26 @@ jobs:
           DEPLOY_IP: ${{ secrets.DEPLOY_IP }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
           ENVIRONMENT: ${{ github.event.inputs.environment || 'production' }}
+          DRUPAL_ENV: ${{ github.event.inputs.environment || 'production' }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           set -euo pipefail
           DEPLOY_TARGET="${DEPLOY_HOST:-${DEPLOY_IP:-${SERVER_IP:-}}}"
+          EFFECTIVE_DB_HOST="${DB_HOST:-}"
+
+          if [ -z "$EFFECTIVE_DB_HOST" ] && [ "$ENVIRONMENT" = "production" ]; then
+            EFFECTIVE_DB_HOST="localhost"
+          fi
 
           echo "========== DÉPLOIEMENT =========="
           echo "Vers: ${DEPLOY_TARGET}"
           echo "Path: ${DEPLOY_PATH}"
           echo "Environnement: ${ENVIRONMENT}"
+
+          export DB_HOST="$EFFECTIVE_DB_HOST"
 
           bash scripts/deploy.sh \
             "${ENVIRONMENT}" \

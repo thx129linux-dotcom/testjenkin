@@ -903,8 +903,9 @@ $settings['migrate_node_migrate_type_classic'] = FALSE;
 # if (file_exists($app_root . '/' . $site_path . '/settings.local.php')) {
 #   include $app_root . '/' . $site_path . '/settings.local.php';
 # }
-$drupal_env = getenv('DRUPAL_ENV') ?: 'develop';
-$db_default_host = ($drupal_env === 'production') ? 'localhost' : 'mariadb';
+$drupal_env = strtolower(getenv('DRUPAL_ENV') ?: 'production');
+$is_development_env = in_array($drupal_env, ['dev', 'develop', 'development', 'local'], true);
+$db_default_host = $is_development_env ? 'mariadb' : 'localhost';
 
 $databases['default']['default'] = [
   'database' => getenv('DB_NAME') ?: 'drupal',
