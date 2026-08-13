@@ -903,18 +903,19 @@ $settings['migrate_node_migrate_type_classic'] = FALSE;
 # if (file_exists($app_root . '/' . $site_path . '/settings.local.php')) {
 #   include $app_root . '/' . $site_path . '/settings.local.php';
 # }
-$databases['default']['default'] = array (
-  'database' => 'drupal',
-  'username' => 'drupal',
-  'password' => '7p%~Cb%C5BtZyVX4+',
+$drupal_env = getenv('DRUPAL_ENV') ?: 'develop';
+$db_default_host = ($drupal_env === 'production') ? 'localhost' : 'mariadb';
+
+$databases['default']['default'] = [
+  'database' => getenv('DB_NAME') ?: 'drupal',
+  'username' => getenv('DB_USER') ?: 'drupal',
+  'password' => getenv('DB_PASSWORD') ?: 'drupal_password',
   'prefix' => '',
-  'host' => 'mariadb',
-  'port' => 3306,
+  'host' => getenv('DB_HOST') ?: $db_default_host,
+  'port' => getenv('DB_PORT') ?: 3306,
   'isolation_level' => 'READ COMMITTED',
   'driver' => 'mysql',
   'namespace' => 'Drupal\\mysql\\Driver\\Database\\mysql',
   'autoload' => 'core/modules/mysql/src/Driver/Database/mysql/',
-);
+];
 $settings['config_sync_directory'] = 'sites/default/files/config_j4opytXd1YY19P1UnYPC24Jao3sCGJaqYbU7i0DTsET1-ozJVWhyijbcv8wqgxCo6PZ5xGSqvQ/sync';
-
-
