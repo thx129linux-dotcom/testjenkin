@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 ENVIRONMENT="${1:-develop}"
 DEPLOY_HOST="${2:-}"
@@ -21,9 +21,28 @@ if [ -f ".env" ]; then
 fi
 
 if [ -n "$DEPLOY_HOST" ]; then
-    SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     if [ -n "$SSH_KEY_FILE" ]; then
         SSH_OPTS="$SSH_OPTS -i $SSH_KEY_FILE"
+    fi
+
+    echo "✓ Vérification accès SSH non-interactif..."
+    if ! ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "echo 'SSH OK'" >/dev/null 2>&1; then
+        echo "❌ Connexion SSH non-interactive impossible vers $DEPLOY_USER@$DEPLOY_HOST."
+        echo "   Vérifiez la clé SSH Jenkins, l'utilisateur et authorized_keys côté serveur."
+        exit 1
+    fi
+
+    REMOTE_SUDO_CMD=""
+    if ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "command -v sudo >/dev/null 2>&1 && sudo -n true" >/dev/null 2>&1; then
+        REMOTE_SUDO_CMD="sudo -n"
+        echo "✓ sudo non-interactif disponible sur le serveur distant."
+    elif ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "[ \"\$(id -u)\" -eq 0 ]" >/dev/null 2>&1; then
+        REMOTE_SUDO_CMD=""
+        echo "✓ Connexion distante en root (sudo non requis)."
+    else
+        echo "⚠️ sudo non-interactif indisponible sur le serveur distant."
+        echo "   Le script continue sans sudo ; certaines opérations (chown) seront ignorées."
     fi
 
     if [ ! -d "vendor" ]; then
@@ -40,7 +59,10 @@ if [ -n "$DEPLOY_HOST" ]; then
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR' '$BACKUP_DIR'"
 
     echo "✓ Backup distant (si existant)..."
-    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "if [ -d '$DEPLOY_DIR/web' ]; then tar -czf '$BACKUP_DIR/drupal-$ENVIRONMENT-$TIMESTAMP.tar.gz' '$DEPLOY_DIR' || true; fi"
+    # Le backup ne doit jamais bloquer un déploiement : on le tente, on avertit en cas d'échec.
+    if ! ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "if [ -d '$DEPLOY_DIR/web' ]; then ${REMOTE_SUDO_CMD:+$REMOTE_SUDO_CMD }tar -czf '$BACKUP_DIR/drupal-$ENVIRONMENT-$TIMESTAMP.tar.gz' '$DEPLOY_DIR'; fi"; then
+        echo "⚠️ Backup distant échoué (non bloquant)."
+    fi
 
     echo "✓ Synchronisation des sources..."
     rsync -avz --delete -e "ssh $SSH_OPTS" \
@@ -56,16 +78,23 @@ if [ -n "$DEPLOY_HOST" ]; then
     rsync -avz --delete -e "ssh $SSH_OPTS" vendor/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/vendor/"
 
     echo "✓ Permissions et bootstrap fichiers sur serveur..."
-    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs' && \
-        chown -R www-data:www-data '$DEPLOY_DIR/web/sites/default/files' || true && \
-        chmod -R 755 '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs' || true"
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs'"
+
+    if [ -n "$REMOTE_SUDO_CMD" ]; then
+        ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "$REMOTE_SUDO_CMD chown -R www-data:www-data '$DEPLOY_DIR/web/sites/default/files' && $REMOTE_SUDO_CMD chmod -R 755 '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs'"
+    else
+        echo "⚠️ Étape chown ignorée (sudo non disponible)."
+        ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "chmod -R 755 '$DEPLOY_DIR/web/sites/default/files' '$DEPLOY_DIR/logs'" || true
+    fi
 
     echo "✓ Vérification des fichiers settings sur serveur..."
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "if [ ! -f '$DEPLOY_DIR/web/sites/default/settings.php' ]; then cp '$DEPLOY_DIR/web/sites/default/default.settings.php' '$DEPLOY_DIR/web/sites/default/settings.php'; fi"
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "if [ ! -f '$DEPLOY_DIR/web/sites/default/settings.local.php' ] && [ -f '$DEPLOY_DIR/web/sites/default/example.settings.local.php' ]; then cp '$DEPLOY_DIR/web/sites/default/example.settings.local.php' '$DEPLOY_DIR/web/sites/default/settings.local.php'; fi"
 
     echo "✓ Opérations post-déploiement Drupal sur serveur..."
-    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && if [ -x 'vendor/bin/drush' ]; then php vendor/bin/drush -y updatedb || true; php vendor/bin/drush -y config:import || true; php vendor/bin/drush cache:rebuild || true; else echo '⚠️ drush non trouvé sur serveur'; fi"
+    # Plus de "|| true" ici : si updatedb/config:import échoue, le déploiement
+    # doit être marqué en échec dans Jenkins plutôt que de faire croire à un succès.
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && php vendor/bin/drush -y updatedb && php vendor/bin/drush -y config:import && php vendor/bin/drush cache:rebuild"
 else
     # Déploiement local (fallback)
     if [ ! -d "vendor" ]; then
@@ -78,7 +107,9 @@ else
 
     if [ -d "$DEPLOY_DIR/web" ]; then
         echo "✓ Création d'une sauvegarde..."
-        tar -czf "$BACKUP_DIR/drupal-$ENVIRONMENT-$TIMESTAMP.tar.gz" "$DEPLOY_DIR" || true
+        if ! tar -czf "$BACKUP_DIR/drupal-$ENVIRONMENT-$TIMESTAMP.tar.gz" "$DEPLOY_DIR"; then
+            echo "⚠️ Backup local échoué (non bloquant)."
+        fi
     fi
 
     echo "✓ Copie des fichiers..."
@@ -95,9 +126,18 @@ else
     cp -r vendor "$DEPLOY_DIR/"
 
     echo "✓ Définition des permissions..."
-    chown -R www-data:www-data "$DEPLOY_DIR/web/sites/default/files" || true
-    chmod -R 755 "$DEPLOY_DIR/web/sites/default/files" || true
-    chmod -R 755 "$DEPLOY_DIR/logs" || true
+    if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+        sudo -n chown -R www-data:www-data "$DEPLOY_DIR/web/sites/default/files"
+        sudo -n chmod -R 755 "$DEPLOY_DIR/web/sites/default/files"
+        sudo -n chmod -R 755 "$DEPLOY_DIR/logs"
+    elif [ "$(id -u)" -eq 0 ]; then
+        chown -R www-data:www-data "$DEPLOY_DIR/web/sites/default/files"
+        chmod -R 755 "$DEPLOY_DIR/web/sites/default/files"
+        chmod -R 755 "$DEPLOY_DIR/logs"
+    else
+        echo "⚠️ sudo non-interactif indisponible localement. Étape chown ignorée."
+        chmod -R 755 "$DEPLOY_DIR/web/sites/default/files" "$DEPLOY_DIR/logs" || true
+    fi
 
     echo "✓ Vérification de la configuration..."
     if [ ! -f "$DEPLOY_DIR/web/sites/default/settings.php" ]; then
@@ -111,11 +151,12 @@ else
     echo "✓ Exécution des opérations post-déploiement..."
     cd "$DEPLOY_DIR"
     if [ -x "vendor/bin/drush" ]; then
-        php vendor/bin/drush -y updatedb || true
-        php vendor/bin/drush -y config:import || true
-        php vendor/bin/drush cache:rebuild || true
+        php vendor/bin/drush -y updatedb
+        php vendor/bin/drush -y config:import
+        php vendor/bin/drush cache:rebuild
     else
-        echo "  ⚠️  drush non trouvé, opérations drush ignorées"
+        echo "❌ drush non trouvé, impossible de finaliser le déploiement local."
+        exit 1
     fi
 fi
 

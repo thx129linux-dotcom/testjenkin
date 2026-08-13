@@ -42,7 +42,19 @@ pipeline {
         string(
             name: 'SERVER_IP',
             defaultValue: '',
-            description: 'IP du serveur cible (ex: 203.0.113.10)'
+            description: 'IP du serveur cible - si renseigné, prime sur SERVER_IP_STAGING / SERVER_IP_PRODUCTION ci-dessous'
+        )
+
+        string(
+            name: 'SERVER_IP_STAGING',
+            defaultValue: '',
+            description: 'IP par défaut du serveur staging (utilisée si SERVER_IP est vide et ENVIRONMENT=staging)'
+        )
+
+        string(
+            name: 'SERVER_IP_PRODUCTION',
+            defaultValue: '',
+            description: 'IP par défaut du serveur production (utilisée si SERVER_IP est vide et ENVIRONMENT=production)'
         )
 
         string(
@@ -53,8 +65,8 @@ pipeline {
 
         string(
             name: 'DEPLOY_PATH',
-            defaultValue: '/var/www/drupal-production',
-            description: 'Répertoire de déploiement sur le serveur'
+            defaultValue: '',
+            description: 'Répertoire de déploiement - si vide, déduit automatiquement de ENVIRONMENT (/var/www/drupal-staging ou /var/www/drupal-production)'
         )
 
         string(
@@ -91,6 +103,8 @@ pipeline {
         DEPLOY_EXECUTED = 'false'
         DEPLOY_SKIP_REASONS = ''
         DEPLOY_ENV_EFFECTIVE = ''
+        SERVER_IP_EFFECTIVE = ''
+        DEPLOY_PATH_EFFECTIVE = ''
         GITHUB_REPO = sh(
             script: "git config --get remote.origin.url | sed 's|.*/||' | sed 's|\\.git||'",
             returnStdout: true
@@ -326,29 +340,46 @@ pipeline {
         stage('Deploy Gate') {
             steps {
                 script {
-                    def blockers = []
+                    env.DEPLOY_ALLOWED = 'false'
+                    env.DEPLOY_SKIP_REASONS = ''
+                    env.DEPLOY_ENV_EFFECTIVE = params.ENVIRONMENT ?: 'production'
 
-                    env.DEPLOY_ENV_EFFECTIVE = params.ENVIRONMENT
-
+                    // Un seul dépôt/branche (main) : la cible de déploiement est pilotée
+                    // uniquement par le paramètre ENVIRONMENT. "develop" reste local
+                    // (pas de déploiement serveur) ; "staging" et "production" déploient,
+                    // chacun vers le SERVER_IP / DEPLOY_PATH fournis au lancement du build.
                     if (env.BRANCH_NAME != 'main') {
-                        blockers << "Branche attendue: main (actuelle: ${env.BRANCH_NAME})"
-                    }
-
-                    if (env.BRANCH_NAME == 'main' && params.ENVIRONMENT != 'production') {
-                        env.DEPLOY_ENV_EFFECTIVE = 'production'
-                        echo "ℹ️ Environnement de déploiement forcé à production (paramètre actuel: ${params.ENVIRONMENT})."
-                    }
-
-                    if (blockers) {
-                        env.DEPLOY_ALLOWED = 'false'
-                        env.DEPLOY_SKIP_REASONS = blockers.join(' | ')
-                        echo 'ℹ️ Déploiement distant ignoré (conditions non remplies):'
-                        blockers.each { reason -> echo " - ${reason}" }
-                    } else {
+                        env.DEPLOY_SKIP_REASONS = "Branche attendue: main (actuelle: ${env.BRANCH_NAME})"
+                        echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
+                    } else if (params.ENVIRONMENT == 'staging' || params.ENVIRONMENT == 'production') {
                         env.DEPLOY_ALLOWED = 'true'
-                        env.DEPLOY_SKIP_REASONS = ''
-                        echo "✅ Conditions de déploiement validées (branche main)."
-                        echo "✅ Environnement de déploiement effectif: ${env.DEPLOY_ENV_EFFECTIVE}"
+                        env.DEPLOY_ENV_EFFECTIVE = params.ENVIRONMENT
+
+                        // IP effective : SERVER_IP (override manuel) > SERVER_IP_STAGING/PRODUCTION (défaut par env)
+                        if (params.SERVER_IP?.trim()) {
+                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP.trim()
+                        } else if (params.ENVIRONMENT == 'staging') {
+                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP_STAGING?.trim() ?: ''
+                        } else {
+                            env.SERVER_IP_EFFECTIVE = params.SERVER_IP_PRODUCTION?.trim() ?: ''
+                        }
+
+                        // Chemin effectif : DEPLOY_PATH (override manuel) sinon déduit de l'environnement
+                        if (params.DEPLOY_PATH?.trim()) {
+                            env.DEPLOY_PATH_EFFECTIVE = params.DEPLOY_PATH.trim()
+                        } else if (params.ENVIRONMENT == 'staging') {
+                            env.DEPLOY_PATH_EFFECTIVE = '/var/www/drupal-staging'
+                        } else {
+                            env.DEPLOY_PATH_EFFECTIVE = '/var/www/drupal-production'
+                        }
+
+                        echo "✅ Conditions de déploiement validées (branche main + ${params.ENVIRONMENT})."
+                        echo "✅ Environnement de déploiement effectif : ${env.DEPLOY_ENV_EFFECTIVE}"
+                        echo "✅ Serveur effectif : ${env.SERVER_IP_EFFECTIVE ?: '<non renseigné>'}"
+                        echo "✅ Chemin effectif  : ${env.DEPLOY_PATH_EFFECTIVE}"
+                    } else {
+                        env.DEPLOY_SKIP_REASONS = "Environnement 'develop' : pas de déploiement serveur."
+                        echo "ℹ️ Déploiement ignoré: ${env.DEPLOY_SKIP_REASONS}"
                     }
                 }
             }
@@ -376,8 +407,8 @@ pipeline {
                     withEnv([
                         "BRANCH_NAME=${env.BRANCH_NAME}",
                         "DEPLOY_ENV_EFFECTIVE=${env.DEPLOY_ENV_EFFECTIVE}",
-                        "SERVER_IP=${params.SERVER_IP}",
-                        "DEPLOY_PATH=${params.DEPLOY_PATH}",
+                        "SERVER_IP=${env.SERVER_IP_EFFECTIVE}",
+                        "DEPLOY_PATH=${env.DEPLOY_PATH_EFFECTIVE}",
                         "DEPLOY_USER=${params.DEPLOY_USER}"
                     ]) {
                         sh '''
@@ -396,7 +427,9 @@ pipeline {
                             fi
 
                             if [ -z "$SERVER_IP" ]; then
-                                echo "❌ SERVER_IP n'est pas renseignée."
+                                echo "❌ Aucune IP serveur disponible pour l'environnement ${DEPLOY_ENV_EFFECTIVE}."
+                                echo "   Renseigne SERVER_IP au lancement, ou configure SERVER_IP_STAGING /"
+                                echo "   SERVER_IP_PRODUCTION comme valeur par défaut du job Jenkins."
                                 exit 1
                             fi
 
