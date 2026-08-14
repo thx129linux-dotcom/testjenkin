@@ -308,7 +308,27 @@ pipeline {
                 }
             }
         }
+        
+        stage('Enable Bootstrap') {
+    steps {
+        sh '''
+            set -e
 
+            echo "========== ACTIVATION DU THÈME BOOTSTRAP =========="
+
+            if [ ! -x "vendor/bin/drush" ]; then
+                echo "❌ Drush introuvable"
+                exit 1
+            fi
+
+            vendor/bin/drush theme:enable bootstrap -y
+            vendor/bin/drush config:set system.theme default bootstrap -y
+            vendor/bin/drush cr
+
+            echo "✅ Bootstrap activé comme thème par défaut"
+        '''
+    }
+}
         stage('Build') {
             steps {
                 sh '''
