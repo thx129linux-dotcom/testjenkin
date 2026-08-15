@@ -135,9 +135,24 @@ if [ -n "$DEPLOY_HOST" ]; then
                 exit 1
             fi
 
-            echo "⚠️ Drupal non installé sur le serveur distant, lancement de site:install..."
-            ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y site:install standard --db-url='mysql://${REMOTE_DB_USER}:${REMOTE_DB_PASSWORD}@${REMOTE_DB_HOST}/${REMOTE_DB_NAME}' --site-name='Drupal ${ENVIRONMENT}' --account-name=admin --account-pass=admin123"
-        else
+echo "⚠️ Drupal non installé sur le serveur distant, lancement de site:install..."
+
+if [ "$ENVIRONMENT" = "develop" ]; then
+    # Environnement local/dev : mot de passe fixe accepté pour la commodité.
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y site:install standard --db-url='mysql://${REMOTE_DB_USER}:${REMOTE_DB_PASSWORD}@${REMOTE_DB_HOST}/${REMOTE_DB_NAME}' --site-name='Drupal ${ENVIRONMENT}' --account-name=admin --account-pass=admin123"
+else
+    # Staging/Production : on laisse drush générer un mot de passe aléatoire
+    # (comportement natif si --account-pass est omis). Le mot de passe est
+    # affiché une seule fois dans les logs de site:install côté serveur distant ;
+    # ne pas le stocker en clair côté Jenkins.
+    ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "cd '$DEPLOY_DIR' && '$REMOTE_PHP_BIN' vendor/bin/drush -y site:install standard --db-url='mysql://${REMOTE_DB_USER}:${REMOTE_DB_PASSWORD}@${REMOTE_DB_HOST}/${REMOTE_DB_NAME}' --site-name='Drupal ${ENVIRONMENT}' --account-name=admin"
+
+    echo "🔑 Un mot de passe admin aléatoire a été généré par Drush ci-dessus."
+    echo "   Récupérez-le dans les logs du build Jenkins (accès restreint) ou générez"
+    echo "   un lien de connexion à usage unique avec :"
+    echo "   ssh $DEPLOY_USER@$DEPLOY_HOST \"cd $DEPLOY_DIR && $REMOTE_PHP_BIN vendor/bin/drush uli\""
+fi
+            else
             echo "❌ Drupal non installé sur le serveur distant."
             echo "   Relancez le job avec INSTALL_DRUPAL=true pour initialiser la base distante."
             exit 1
